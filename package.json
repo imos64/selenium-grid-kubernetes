@@ -1,0 +1,6 @@
+{
+  "name": "selenium",
+  "repository": "selenium-grid-kubernetes",
+  "namespace": "selenium",
+  "operator": false
+}

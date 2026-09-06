@@ -1,0 +1,38 @@
+app:
+  fullnameOverride: selenium
+  isolateComponents: false
+  ingress:
+    enabled: false
+  chromeNode:
+    replicas: 1
+    dshmVolumeSizeLimit: 1Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 1Gi
+      limits:
+        cpu: '1'
+        memory: 2Gi
+    livenessProbe:
+      enabled: true
+  firefoxNode:
+    enabled: false
+  edgeNode:
+    enabled: false
+  hub:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: '1'
+        memory: 1Gi
+  autoscaling:
+    enabled: false
+  secrets:
+    create: false
+    nameOverride: selenium-secrets
+  basicAuth:
+    enabled: true
+    create: false
+    nameOverride: selenium-basic-auth

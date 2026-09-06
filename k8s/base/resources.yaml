@@ -1,0 +1,830 @@
+---
+# Source: selenium-grid-kubernetes/templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: selenium-workload-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: selenium
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector: {}
+    - namespaceSelector:
+        matchLabels:
+          platform-access: 'true'
+---
+# Source: selenium-grid-kubernetes/charts/app/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: selenium-serviceaccount
+  namespace: selenium
+  labels:
+    app.kubernetes.io/name: selenium-service-account
+
+    app.kubernetes.io/component: selenium-grid-4.48.0-20260905
+    app.kubernetes.io/instance: selenium
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/version: 4.48.0-20260905
+    helm.sh/chart: app-0.59.1
+---
+# Source: selenium-grid-kubernetes/charts/app/templates/distributor-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: selenium-distributor-config
+  namespace: selenium
+  labels:
+
+    app.kubernetes.io/component: selenium-grid-4.48.0-20260905
+    app.kubernetes.io/instance: selenium
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/version: 4.48.0-20260905
+    helm.sh/chart: app-0.59.1
+data:
+  distributorProbe.sh:    |
+      #!/bin/bash
+
+      max_time=3
+      retry_time=3
+      probe_name="Probe.${1:-"Liveness"}"
+      ts_format=${SE_LOG_TIMESTAMP_FORMAT:-"%Y-%m-%d %H:%M:%S,%3N"}
+      ROUTER_CONFIG_DIRECTORY=${ROUTER_CONFIG_DIRECTORY:-"/opt/bin"}
+
+      GRID_GRAPHQL_URL=$(bash ${ROUTER_CONFIG_DIRECTORY}/routerGraphQLUrl.sh)
+      auth_header=()
+      if [ -n "${SE_ROUTER_USERNAME}" ] && [ -n "${SE_ROUTER_PASSWORD}" ]; then
+        BASIC_AUTH="$(echo -en "${SE_ROUTER_USERNAME}:${SE_ROUTER_PASSWORD}" | base64 -w0)"
+        auth_header=(-H "Authorization: Basic ${BASIC_AUTH}")
+      fi
+
+      if [ -z "${GRID_GRAPHQL_URL}" ]; then
+        echo "$(date -u +"${ts_format}") DEBUG [${probe_name}] - Could not construct GraphQL endpoint, please provide SE_HUB_HOST (or SE_ROUTER_HOST) and SE_HUB_PORT (or SE_ROUTER_PORT). Bypass the probe checks for now."
+        exit 0
+      fi
+
+      GRAPHQL_PRE_CHECK=$(curl --noproxy "*" -m ${max_time} -k -X POST "${auth_header[@]}" -H "Content-Type: application/json" --data '{"query":"{ grid { sessionCount } }"}' -s -o /dev/null -w "%{http_code}" ${GRID_GRAPHQL_URL})
+
+      if [ ${GRAPHQL_PRE_CHECK} -ne 200 ]; then
+        echo "$(date -u +"${ts_format}") DEBUG [${probe_name}] - GraphQL endpoint ${GRID_GRAPHQL_URL} is not reachable. Status code: ${GRAPHQL_PRE_CHECK}."
+        exit 1
+      fi
+
+      SESSION_QUEUE_SIZE=$(curl --noproxy "*" --retry ${retry_time} -m ${max_time} -k -X POST "${auth_header[@]}" -H "Content-Type: application/json" --data '{"query":"{ grid { sessionQueueSize } }"}' -s ${GRID_GRAPHQL_URL} | jq -r '.data.grid.sessionQueueSize')
+
+      SESSION_COUNT=$(curl --noproxy "*" --retry ${retry_time} -m ${max_time} -k -X POST "${auth_header[@]}" -H "Content-Type: application/json" --data '{"query": "{ grid { sessionCount } }"}' -s ${GRID_GRAPHQL_URL} | jq -r '.data.grid.sessionCount')
+
+      MAX_SESSION=$(curl --noproxy "*" --retry ${retry_time} -m ${max_time} -k -X POST "${auth_header[@]}" -H "Content-Type: application/json" --data '{"query":"{ grid { maxSession } }"}' -s ${GRID_GRAPHQL_URL} | jq -r '.data.grid.maxSession')
+
+      if [ "${SE_LOG_LISTEN_GRAPHQL:-"false"}" = "true" ]; then
+        echo "$(curl --noproxy "*" --retry ${retry_time} -m ${max_time} -k -X POST "${auth_header[@]}" -H "Content-Type: application/json" --data '{"query":"{ grid { sessionCount, maxSession, totalSlots }, nodesInfo { nodes { id, status, sessionCount, maxSession, slotCount, stereotypes, sessions { id, capabilities, slot { id, stereotype } } } }, sessionsInfo { sessionQueueRequests } }"}' -s ${GRID_GRAPHQL_URL} )"
+      fi
+
+      if [ ${SESSION_QUEUE_SIZE} -gt 0 ] && [ ${SESSION_COUNT} -eq 0 ]; then
+        echo "$(date -u +"${ts_format}") DEBUG [${probe_name}] - Session Queue Size: ${SESSION_QUEUE_SIZE}, Session Count: ${SESSION_COUNT}, Max Session: ${MAX_SESSION}"
+        echo "$(date -u +"${ts_format}") DEBUG [${probe_name}] - It seems the Distributor is delayed in processing a new session in the queue. Probe checks failed."
+        exit 1
+      else
+        echo "$(date -u +"${ts_format}") DEBUG [${probe_name}] - Distributor is healthy."
+        exit 0
+      fi
+  SE_JAVA_OPTS: "-XX:+UseG1GC -XX:MaxGCPauseMillis=1000 -XX:MaxRAMPercentage=100"
+---
+# Source: selenium-grid-kubernetes/charts/app/templates/event-bus-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: selenium-event-bus-config
+  namespace: selenium
+  labels:
+
+    app.kubernetes.io/component: selenium-grid-4.48.0-20260905
+    app.kubernetes.io/instance: selenium
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/version: 4.48.0-20260905
+    helm.sh/chart: app-0.59.1
+data:
+  SE_EVENT_BUS_HOST: "selenium-hub"
+  SE_EVENT_BUS_PUBLISH_PORT: "4442"
+  SE_EVENT_BUS_SUBSCRIBE_PORT: "4443"
+  SE_JAVA_OPTS: "-XX:+UseG1GC -XX:MaxGCPauseMillis=1000 -XX:MaxRAMPercentage=100"
+---
+# Source: selenium-grid-kubernetes/charts/app/templates/logging-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: selenium-logging-config
+  namespace: selenium
+  labels:
+
+    app.kubernetes.io/component: selenium-grid-4.48.0-20260905
+    app.kubernetes.io/instance: selenium
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/version: 4.48.0-20260905
+    helm.sh/chart: app-0.59.1
+data:
+  SE_LOG_LEVEL: "INFO"
+  SE_STRUCTURED_LOGS: "false"
+  SE_PLAIN_LOGS: "true"
+  SE_HTTP_LOGS: "false"
+  SE_ENABLE_TRACING: "false"
+---
+# Source: selenium-grid-kubernetes/charts/app/templates/node-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: selenium-node-config
+  namespace: selenium
+  labels:
+
+    app.kubernetes.io/component: selenium-grid-4.48.0-20260905
+    app.kubernetes.io/instance: selenium
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/version: 4.48.0-20260905
+    helm.sh/chart: app-0.59.1
+data:
+  SE_HUB_HOST: "selenium-hub"
+  SE_HUB_PORT: '4444'
+  NODE_CONFIG_DIRECTORY: '/opt/bin'
+  SE_SUB_PATH: ''
+  nodeGridUrl.sh:    |
+      #!/bin/bash
+
+      max_time=3
+
+      auth_header=()
+      if [ -n "${SE_ROUTER_USERNAME}" ] && [ -n "${SE_ROUTER_PASSWORD}" ]; then
+        BASIC_AUTH="$(echo -en "${SE_ROUTER_USERNAME}:${SE_ROUTER_PASSWORD}" | base64 -w0)"
+        auth_header=(-H "Authorization: Basic ${BASIC_AUTH}")
+      fi
+
+      if [ "${SE_SUB_PATH}" = "/" ]; then
+        SE_SUB_PATH=""
+      fi
+
+      if [ -z "${SE_HUB_HOST:-$SE_ROUTER_HOST}" ] || [ -z "${SE_HUB_PORT:-$SE_ROUTER_PORT}" ]; then
+        grid_url=""
+      else
+        grid_url=${SE_SERVER_PROTOCOL}://${SE_HUB_HOST:-$SE_ROUTER_HOST}:${SE_HUB_PORT:-$SE_ROUTER_PORT}${SE_SUB_PATH}
+      fi
+
+      if [ -z "${grid_url}" ]; then
+        grid_url="${SE_NODE_GRID_URL}"
+      fi
+
+      if [ -z "${grid_url}" ]; then
+        grid_url="${SE_SERVER_PROTOCOL}://127.0.0.1:4444${SE_SUB_PATH}" # For standalone mode
+      fi
+
+      grid_url_checks=$(curl --noproxy "*" "${auth_header[@]}" -m ${max_time} -s -k -o /dev/null -w "%{http_code}" ${grid_url})
+
+      return_array=("${grid_url}" "${grid_url_checks}")
+
+      # stdout the values for other scripts consuming
+      echo "${return_array[@]}"
+  nodePreStop.sh:    |
+      #!/bin/bash
+
+      probe_name="lifecycle.${1:-"preStop"}"
+      SE_NODE_PORT=${SE_NODE_PORT:-"5555"}
+      ts_format=${SE_LOG_TIMESTAMP_FORMAT:-"%Y-%m-%d %H:%M:%S,%3N"}
+      NODE_CONFIG_DIRECTORY=${NODE_CONFIG_DIRECTORY:-"/opt/bin"}
+      PRESTOP_WAIT_STRATEGY=${SE_NODE_PRESTOP_WAIT_STRATEGY:-"deployment"}
+
+      max_time=3
+      retry_time=5
+
+      if [ "${PRESTOP_WAIT_STRATEGY,,}" = "job" ]; then
+        echo "$(date -u +"${ts_format}") [${probe_name}] - Using pre-stop strategy Job to wait for current sessions to be finished"
+        while pgrep -f 'java.*selenium' | grep -v $$; do sleep 5; done
+        exit 0
+      fi
+
+      echo "$(date -u +"${ts_format}") [${probe_name}] - Using pre-stop strategy Deployment to wait for current sessions to be finished"
+
+      ID=$(echo $RANDOM)
+      tmp_node_file="/tmp/nodeProbe${ID}"
+
+      function on_exit() {
+        rm -rf ${tmp_node_file}
+        echo "$(date -u +"${ts_format}") [${probe_name}] - Exiting Node ${probe_name}..."
+        exit 0
+      }
+      trap on_exit EXIT
+
+      function init_file() {
+        echo "{}" > ${tmp_node_file}
+      }
+      init_file
+
+      # Set headers if Node Registration Secret is set
+      if [ ! -z "${SE_REGISTRATION_SECRET}" ]; then
+        HEADERS="X-REGISTRATION-SECRET: ${SE_REGISTRATION_SECRET}"
+      else
+        HEADERS="X-REGISTRATION-SECRET;"
+      fi
+
+      function signal_hub_to_drain_node() {
+        return_list=($(bash ${NODE_CONFIG_DIRECTORY}/nodeGridUrl.sh))
+        grid_url=${return_list[0]}
+        grid_check=${return_list[1]}
+        auth_header=()
+        if [ -n "${SE_ROUTER_USERNAME}" ] && [ -n "${SE_ROUTER_PASSWORD}" ]; then
+          BASIC_AUTH="$(echo -en "${SE_ROUTER_USERNAME}:${SE_ROUTER_PASSWORD}" | base64 -w0)"
+          auth_header=(-H "Authorization: Basic ${BASIC_AUTH}")
+        fi
+        if [ -n "${grid_url}" ]; then
+          if [ "${grid_check}" = "401" ]; then
+            echo "$(date -u +"${ts_format}") [${probe_name}] - Hub/Router requires authentication. Please check env vars SE_ROUTER_USERNAME and SE_ROUTER_PASSWORD are given."
+          elif [ "${grid_check}" = "404" ]; then
+            echo "$(date -u +"${ts_format}") [${probe_name}] - Hub/Router endpoint could not be found. Please check the endpoint ${grid_url}"
+          elif [ "${grid_check}" = "200" ]; then
+            echo "$(date -u +"${ts_format}") [${probe_name}] - Hub/Router endpoint is reachable. Signaling Hub/Router to drain node"
+            curl --noproxy "*" -m ${max_time} -k -X POST "${auth_header[@]}" ${grid_url}/se/grid/distributor/node/${NODE_ID}/drain --header "${HEADERS}"
+          else
+            echo "$(date -u +"${ts_format}") [${probe_name}] - Hub/Router endpoint returns ${grid_check}. Skip signaling upstream."
+          fi
+        else
+          echo "$(date -u +"${ts_format}") [${probe_name}] - There is no configured HUB/ROUTER host or SE_NODE_GRID_URL isn't set. ${probe_name} ignores to send drain request to upstream."
+        fi
+      }
+
+      function signal_node_to_drain() {
+          echo "$(date -u +"${ts_format}") [${probe_name}] - Signaling Node to drain itself"
+          curl --noproxy "*" -m ${max_time} -k -X POST ${SE_SERVER_PROTOCOL}://127.0.0.1:${SE_NODE_PORT}/se/grid/node/drain --header "${HEADERS}"
+      }
+
+      if curl --noproxy "*" -m ${max_time} -sfk ${SE_SERVER_PROTOCOL}://127.0.0.1:${SE_NODE_PORT}/status > ${tmp_node_file}; then
+          NODE_ID=$(jq -r '.value.node.nodeId' ${tmp_node_file} || echo "")
+          if [ -n "${NODE_ID}" ]; then
+            echo "$(date -u +"${ts_format}") [${probe_name}] - Current Node ID is: ${NODE_ID}"
+            signal_hub_to_drain_node
+            echo
+          fi
+          signal_node_to_drain
+          # Wait for the current session to be finished if any
+          check_attempts=0
+          while true; do
+            # Attempt the cURL request and capture the exit status
+            endpoint_http_code=$(curl --noproxy "*" --retry ${retry_time} -m ${max_time} -sfk "${SE_SERVER_PROTOCOL}://127.0.0.1:${SE_NODE_PORT}/status" -o "${tmp_node_file}" -w "%{http_code}")
+            endpoint_status=$?
+            echo "$(date -u +"${ts_format}") [${probe_name}] - Fetch the Node status via cURL with exit status: ${endpoint_status}, HTTP code: ${endpoint_http_code}"
+
+            SLOT_HAS_SESSION=$(jq -r '[.value.node.slots[]? | select(.session != null)] | length' "${tmp_node_file}" || echo 0)
+            if [ "${SLOT_HAS_SESSION}" -eq 0 ] && [ "${endpoint_http_code}" = "200" ]; then
+              echo "$(date -u +"${ts_format}") [${probe_name}] - There is no session running. Node is ready to be terminated."
+              echo "$(date -u +"${ts_format}") [${probe_name}] - $(cat "${tmp_node_file}" || echo "")"
+              echo
+              exit 0
+            elif [ "${endpoint_http_code}" != "200" ]; then
+              echo "$(date -u +"${ts_format}") [${probe_name}] - Node endpoint returned status ${endpoint_http_code}, attempt one more time to confirm the status."
+              check_attempts=$((check_attempts+1))
+              if [ ${check_attempts} -ge 3 ]; then
+                echo "$(date -u +"${ts_format}") [${probe_name}] - Node endpoint returned status ${endpoint_http_code} for serveral times. Assume that Node is ready to be terminated."
+                exit 0
+              fi
+              sleep 2;
+            else
+              check_attempts=0
+              echo "$(date -u +"${ts_format}") [${probe_name}] - Node is waiting for ${SLOT_HAS_SESSION} session(s) to be finished. Node details: message: $(jq -r '.value.message' "${tmp_node_file}" || echo "unknown"), availability: $(jq -r '.value.node.availability' "${tmp_node_file}" || echo "unknown")"
+              sleep 2;
+            fi
+
+            # If the cURL command failed, break the loop
+            if [ ${endpoint_status} -ne 0 ] || [ "${endpoint_http_code}" != "200" ]; then
+              echo "$(date -u +"${ts_format}") [${probe_name}] - Node endpoint returned status ${endpoint_http_code:-"exit ${endpoint_status}"}, probably Node draining complete!"
+              break
+            fi
+          done
+      else
+          echo "$(date -u +"${ts_format}") [${probe_name}] - Node is already drained. Shutting down gracefully!"
+      fi
+  nodeProbe.sh:    |
+      #!/bin/bash
+
+      max_time=3
+      probe_name="Probe.${1:-"Startup"}"
+      SE_NODE_PORT=${SE_NODE_PORT:-"5555"}
+      ts_format=${SE_LOG_TIMESTAMP_FORMAT:-"%Y-%m-%d %H:%M:%S,%3N"}
+      NODE_CONFIG_DIRECTORY=${NODE_CONFIG_DIRECTORY:-"/opt/bin"}
+
+      ID=$(echo $RANDOM)
+      tmp_node_file="/tmp/nodeProbe${ID}"
+      tmp_grid_file="/tmp/gridProbe${ID}"
+
+      function on_exit() {
+        rm -rf ${tmp_node_file}
+        rm -rf ${tmp_grid_file}
+        exit 0
+      }
+      trap on_exit EXIT
+
+      function init_file() {
+        echo "{}" > ${tmp_node_file}
+        echo "{}" > ${tmp_grid_file}
+      }
+      init_file
+
+      function help_message() {
+        echo "$(date -u +"${ts_format}") [${probe_name}] - If you believe Node is registered successfully but probe still report this message and fail for a long time. Workaround by set 'global.seleniumGrid.defaultNodeStartupProbe' to 'httpGet' and report us an issue for Chart improvement with your scenario."
+      }
+
+      if curl --noproxy "*" -m ${max_time} -sfk "${SE_SERVER_PROTOCOL}://127.0.0.1:${SE_NODE_PORT}/status" -o "${tmp_node_file}"; then
+        NODE_ID=$(jq -r '.value.node.nodeId' "${tmp_node_file}" || echo "")
+        NODE_STATUS=$(jq -r '.value.node.availability' "${tmp_node_file}" || echo "")
+        SLOT_HAS_SESSION=$(jq -r '[.value.node.slots[]? | select(.session != null)] | length' "${tmp_node_file}" || echo 0)
+        if [ -n "${NODE_ID}" ]; then
+          echo "$(date -u +"${ts_format}") [${probe_name}] - Node responds the ID: ${NODE_ID} with status: ${NODE_STATUS}. Number of ongoing sessions: ${SLOT_HAS_SESSION}"
+        else
+          echo "$(date -u +"${ts_format}") [${probe_name}] - Wait for the Node to report its status"
+          exit 1
+        fi
+
+        return_list=($(bash ${NODE_CONFIG_DIRECTORY}/nodeGridUrl.sh))
+        grid_url=${return_list[0]}
+        grid_check=${return_list[1]}
+        auth_header=()
+        if [ -n "${SE_ROUTER_USERNAME}" ] && [ -n "${SE_ROUTER_PASSWORD}" ]; then
+          BASIC_AUTH="$(echo -en "${SE_ROUTER_USERNAME}:${SE_ROUTER_PASSWORD}" | base64 -w0)"
+          auth_header=(-H "Authorization: Basic ${BASIC_AUTH}")
+        fi
+
+        if [ -n "${grid_url}" ]; then
+          if [ "${grid_check}" = "401" ]; then
+            echo "$(date -u +"${ts_format}") [${probe_name}] - Hub/Router requires authentication. Please check SE_ROUTER_USERNAME and SE_ROUTER_PASSWORD."
+          elif [ "${grid_check}" = "404" ]; then
+            echo "$(date -u +"${ts_format}") [${probe_name}] - Hub/Router endpoint could not be found. Please check the endpoint ${grid_url}"
+          fi
+        else
+          echo "$(date -u +"${ts_format}") [${probe_name}] - There is no configured HUB/ROUTER host or SE_NODE_GRID_URL isn't set. ${probe_name} will not work as expected."
+        fi
+
+        endpoint_http_code=$(curl --noproxy "*" -m "${max_time}" "${auth_header[@]}" -sfk "${grid_url}/status" -o "${tmp_grid_file}" -w "%{http_code}")
+        GRID_NODE_ID=$(jq -e ".value.nodes[]?.id|select(. == \"${NODE_ID}\")" "${tmp_grid_file}" | tr -d '"' || echo "")
+        if [ -n "${GRID_NODE_ID}" ]; then
+          echo "$(date -u +"${ts_format}") [${probe_name}] - Grid responds a matched Node ID: ${GRID_NODE_ID}"
+        elif [ "${endpoint_http_code}" != "200" ]; then
+          echo "$(date -u +"${ts_format}") [${probe_name}] - Grid endpoint returns ${endpoint_http_code}. Skip checking upstream."
+        fi
+
+        if [ -n "${NODE_ID}" ] && [ -n "${GRID_NODE_ID}" ] && [ "${NODE_ID}" = "${GRID_NODE_ID}" ]; then
+          echo "$(date -u +"${ts_format}") [${probe_name}] - Node ID: ${NODE_ID} is found in the Grid. Node is ready."
+          exit 0
+        elif [ -n "${NODE_ID}" ] && [ "${endpoint_http_code}" != "200" ]; then
+          echo "$(date -u +"${ts_format}") [${probe_name}] - Node ID: ${NODE_ID} report its status, but could not double check ID in Hub. Assume that Node is ready."
+          exit 0
+        else
+          echo "$(date -u +"${ts_format}") [${probe_name}] - Node ID: ${NODE_ID} is not found in the Grid. Node is not ready."
+          exit 1
+        fi
+      else
+        echo "$(date -u +"${ts_format}") [${probe_name}] - Wait for the Node to report its status"
+        exit 1
+      fi
+  nodeProbeReadiness.sh:    |
+      #!/usr/bin/env bash
+
+      probe_name="Probe.${1:-"Readiness"}"
+      ts_format=${SE_LOG_TIMESTAMP_FORMAT:-"%Y-%m-%d %H:%M:%S,%3N"}
+      ENDPOINT="${SE_SERVER_PROTOCOL:-"http"}://localhost:${SE_NODE_PORT:-"5555"}/status"
+
+      response=$(curl -skSL --noproxy "*" "${ENDPOINT}")
+
+      # Validate the JSON response
+      # From v4.31.0 - [grid] Expose register status via Node status response (#15448)
+      if echo "$response" | jq -e '.value.registered == true' > /dev/null; then
+        echo "$(date -u +"${ts_format}") [${probe_name}] - Readiness check passed: Node is registered."
+      else
+        echo "$(date -u +"${ts_format}") [${probe_name}] - Readiness check failed: Node is not registered."
+        exit 1
+      fi
+  SE_JAVA_OPTS: "-XX:+UseG1GC -XX:MaxGCPauseMillis=1000 -XX:MaxRAMPercentage=50"
+---
+# Source: selenium-grid-kubernetes/charts/app/templates/router-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: selenium-router-config
+  namespace: selenium
+  labels:
+
+    app.kubernetes.io/component: selenium-grid-4.48.0-20260905
+    app.kubernetes.io/instance: selenium
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/version: 4.48.0-20260905
+    helm.sh/chart: app-0.59.1
+data:
+  ROUTER_CONFIG_DIRECTORY: '/opt/bin'
+  routerGraphQLUrl.sh:    |
+      #!/bin/bash
+
+      if [ -z "${SE_HUB_HOST:-$SE_ROUTER_HOST}" ] || [ -z "${SE_HUB_PORT:-$SE_ROUTER_PORT}" ]; then
+        graphql_url=""
+      else
+
+        if [[ ${SE_SUB_PATH} == */ ]]; then
+          GRAPHQL_ENDPOINT="${SE_SUB_PATH}graphql"
+        else
+          GRAPHQL_ENDPOINT="${SE_SUB_PATH}/graphql"
+        fi
+
+        if [[ ${GRAPHQL_ENDPOINT} == /* ]]; then
+          GRAPHQL_ENDPOINT="${GRAPHQL_ENDPOINT}"
+        else
+          GRAPHQL_ENDPOINT="/${GRAPHQL_ENDPOINT}"
+        fi
+
+        graphql_url="${SE_SERVER_PROTOCOL}://${SE_HUB_HOST:-${SE_ROUTER_HOST}}:${SE_HUB_PORT:-${SE_ROUTER_PORT}}${GRAPHQL_ENDPOINT}"
+      fi
+
+      echo "${graphql_url}"
+  routerProbe.sh:    |
+      #!/bin/bash
+
+      max_time=3
+      retry_time=3
+      probe_name="Probe.${1:-"Liveness"}"
+      ts_format=${SE_LOG_TIMESTAMP_FORMAT:-"%Y-%m-%d %H:%M:%S,%3N"}
+      ROUTER_CONFIG_DIRECTORY=${ROUTER_CONFIG_DIRECTORY:-"/opt/bin"}
+
+      GRID_GRAPHQL_URL=$(bash ${ROUTER_CONFIG_DIRECTORY}/routerGraphQLUrl.sh)
+      auth_header=()
+      if [ -n "${SE_ROUTER_USERNAME}" ] && [ -n "${SE_ROUTER_PASSWORD}" ]; then
+        BASIC_AUTH="$(echo -en "${SE_ROUTER_USERNAME}:${SE_ROUTER_PASSWORD}" | base64 -w0)"
+        auth_header=(-H "Authorization: Basic ${BASIC_AUTH}")
+      fi
+
+      if [ -z "${GRID_GRAPHQL_URL}" ]; then
+        echo "$(date -u +"${ts_format}") DEBUG [${probe_name}] - Could not construct GraphQL endpoint, please provide SE_HUB_HOST (or SE_ROUTER_HOST) and SE_HUB_PORT (or SE_ROUTER_PORT). Bypass the probe checks for now."
+        exit 0
+      fi
+
+      GRAPHQL_PRE_CHECK=$(curl --noproxy "*" -m ${max_time} -k -X POST "${auth_header[@]}" -H "Content-Type: application/json" --data '{"query":"{ grid { sessionCount } }"}' -s -o /dev/null -w "%{http_code}" ${GRID_GRAPHQL_URL})
+
+      if [ ${GRAPHQL_PRE_CHECK} -ne 200 ]; then
+        echo "$(date -u +"${ts_format}") DEBUG [${probe_name}] - GraphQL endpoint is not reachable. Status code: ${GRAPHQL_PRE_CHECK}."
+        exit 1
+      else
+        echo "$(date -u +"${ts_format}") DEBUG [${probe_name}] - GraphQL endpoint is healthy."
+        exit 0
+      fi
+  SE_JAVA_OPTS: "-XX:+UseG1GC -XX:MaxGCPauseMillis=1000 -XX:MaxRAMPercentage=100"
+---
+# Source: selenium-grid-kubernetes/charts/app/templates/server-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: selenium-server-config
+  namespace: selenium
+  labels:
+
+    app.kubernetes.io/component: selenium-grid-4.48.0-20260905
+    app.kubernetes.io/instance: selenium
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/version: 4.48.0-20260905
+    helm.sh/chart: app-0.59.1
+data:
+  SE_SERVER_PROTOCOL: "http"
+  SE_SUPERVISORD_LOG_LEVEL: "info"
+---
+# Source: selenium-grid-kubernetes/charts/app/templates/hub-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: selenium-hub
+  namespace: selenium
+  labels:
+    app: selenium-hub
+
+    app.kubernetes.io/component: selenium-grid-4.48.0-20260905
+    app.kubernetes.io/instance: selenium
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/version: 4.48.0-20260905
+    helm.sh/chart: app-0.59.1
+spec:
+  selector:
+    app: selenium-hub
+    app.kubernetes.io/instance: selenium
+  type: ClusterIP
+  ports:
+    - name: http-hub
+      protocol: TCP
+      port: 4444
+      targetPort: 4444
+    - name: tcp-hub-pub
+      protocol: TCP
+      port: 4442
+      targetPort: 4442
+    - name: tcp-hub-sub
+      protocol: TCP
+      port: 4443
+      targetPort: 4443
+---
+# Source: selenium-grid-kubernetes/charts/app/templates/chrome-node-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: selenium-node-chrome
+  namespace: selenium
+  labels:
+    app: selenium-node-chrome
+    app.kubernetes.io/name: selenium-node-chrome
+
+    app.kubernetes.io/component: selenium-grid-4.48.0-20260905
+    app.kubernetes.io/instance: selenium
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/version: 4.48.0-20260905
+    helm.sh/chart: app-0.59.1
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: selenium-node-chrome
+      app.kubernetes.io/instance: selenium
+  template:
+    metadata:
+      labels:
+        app: selenium-node-chrome
+        app.kubernetes.io/name: selenium-node-chrome
+
+        app.kubernetes.io/component: selenium-grid-4.48.0-20260905
+        app.kubernetes.io/instance: selenium
+        app.kubernetes.io/managed-by: helm
+        app.kubernetes.io/version: 4.48.0-20260905
+        helm.sh/chart: app-0.59.1
+      annotations:
+        checksum/event-bus-configmap: c4f34f42e26c32f41ac730560b05fb46f815750683d628713101dcd52e286f67
+        checksum/node-configmap: c4e0b307a8f154cb7bdfa4603a770bf9248c2d37a6e00dc154f07f881495559a
+        checksum/logging-configmap: 592fb07af55f32a0316761eb525d718609f4987079f7e9c8dfd9c13b68ab831b
+        checksum/server-configmap: 03de91cd22ec57d5cc628f224375a1771cfc835ed5efed9635c2810c61b82bbc
+    spec:
+      shareProcessNamespace: true
+      serviceAccountName: selenium-serviceaccount
+      serviceAccount: selenium-serviceaccount
+      restartPolicy: Always
+      initContainers:
+        - name: "pre-puller-selenium-node-chrome"
+          image: selenium/node-chrome:4.48.0-20260905
+          command: ["bash", "-c", "'true'"]
+          resources:
+            limits:
+              cpu: "1"
+              memory: 2Gi
+            requests:
+              cpu: 250m
+              memory: 1Gi
+      containers:
+        - name: selenium-node-chrome
+          image: selenium/node-chrome:4.48.0-20260905
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: KUBERNETES_NODE_HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: SE_NODE_MAX_SESSIONS
+              value: "1"
+            - name: SE_NODE_ENABLE_MANAGED_DOWNLOADS
+              value: "true"
+            - name: SE_NODE_STEREOTYPE_EXTRA
+              value: ""
+            - name: SE_DRAIN_AFTER_SESSION_COUNT
+              value: "0"
+            - name: SE_NODE_CONTAINER_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: SE_OTEL_SERVICE_NAME
+              value: "selenium-node-chrome"
+            - name: SE_OTEL_RESOURCE_ATTRIBUTES
+              value: "app.kubernetes.io/component=selenium-grid-4.48.0-20260905,app.kubernetes.io/instance=selenium,app.kubernetes.io/managed-by=helm,app.kubernetes.io/version=4.48.0-20260905,helm.sh/chart=app-0.59.1"
+            - name: SE_NODE_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: SE_NODE_PORT
+              value: "5555"
+            - name: SE_NODE_REGISTER_PERIOD
+              value: "120"
+            - name: SE_NODE_REGISTER_CYCLE
+              value: "5"
+          envFrom:
+            - configMapRef:
+                name: selenium-event-bus-config
+            - configMapRef:
+                name: selenium-node-config
+            - configMapRef:
+                name: selenium-logging-config
+            - configMapRef:
+                name: selenium-server-config
+            - secretRef:
+                name: selenium-secrets
+            - secretRef:
+                name: selenium-basic-auth
+          ports:
+            - containerPort: 5555
+              protocol: TCP
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: selenium-node-config
+              mountPath: /opt/bin/nodeGridUrl.sh
+              subPath: nodeGridUrl.sh
+            - name: selenium-node-config
+              mountPath: /opt/bin/nodePreStop.sh
+              subPath: nodePreStop.sh
+            - name: selenium-node-config
+              mountPath: /opt/bin/nodeProbe.sh
+              subPath: nodeProbe.sh
+            - name: selenium-node-config
+              mountPath: /opt/bin/nodeProbeReadiness.sh
+              subPath: nodeProbeReadiness.sh
+          resources:
+            limits:
+              cpu: "1"
+              memory: 2Gi
+            requests:
+              cpu: 250m
+              memory: 1Gi
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                - bash
+                - -c
+                - '/opt/bin/nodePreStop.sh '
+          startupProbe:
+            exec:
+              command: ["bash", "-c", "/opt/bin/nodeProbe.sh Startup "]
+            failureThreshold: 12
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 60
+          readinessProbe:
+            exec:
+              command: ["bash", "-c", "/opt/bin/nodeProbeReadiness.sh Readiness "]
+            failureThreshold: 10
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["bash", "-c", "/opt/bin/nodeProbe.sh Liveness "]
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 60
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: selenium-node-config
+          configMap:
+            name: selenium-node-config
+            defaultMode: 493
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+---
+# Source: selenium-grid-kubernetes/charts/app/templates/hub-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: selenium-hub
+  namespace: selenium
+  labels: &hub_labels
+    app: selenium-hub
+    app.kubernetes.io/name: selenium-hub
+
+    app.kubernetes.io/component: selenium-grid-4.48.0-20260905
+    app.kubernetes.io/instance: selenium
+    app.kubernetes.io/managed-by: helm
+    app.kubernetes.io/version: 4.48.0-20260905
+    helm.sh/chart: app-0.59.1
+spec:
+  strategy:
+    type: Recreate
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: selenium-hub
+      app.kubernetes.io/instance: selenium
+  template:
+    metadata:
+      labels: *hub_labels
+      annotations:
+        checksum/logging-configmap: 592fb07af55f32a0316761eb525d718609f4987079f7e9c8dfd9c13b68ab831b
+        checksum/server-configmap: 03de91cd22ec57d5cc628f224375a1771cfc835ed5efed9635c2810c61b82bbc
+        checksum/distributor-configmap: 1d053f83aff958fab96ce0189dd3458fdf9691ed150e3ab87f0072eca13459b2
+        checksum/router-configmap: 4b8d33e1afaf65b1e05088c149ccde7842b74910db27eb1a51eba0f7460fb277
+        checksum/secrets: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+        checksum/tls-cert-secret: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
+    spec:
+      serviceAccountName: selenium-serviceaccount
+      serviceAccount: selenium-serviceaccount
+      containers:
+        - name: selenium-hub
+          image: selenium/hub:4.48.0-20260905
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 4444
+              protocol: TCP
+            - containerPort: 4442
+              protocol: TCP
+            - containerPort: 4443
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              scheme: HTTP
+              path: /readyz
+              port: 4444
+            failureThreshold: 10
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          readinessProbe:
+            httpGet:
+              scheme: HTTP
+              path: /readyz
+              port: 4444
+            failureThreshold: 10
+            initialDelaySeconds: 12
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          livenessProbe:
+            httpGet:
+              scheme: HTTP
+              path: /readyz
+              port: 4444
+            failureThreshold: 30
+            initialDelaySeconds: 60
+            periodSeconds: 60
+            successThreshold: 1
+            timeoutSeconds: 60
+          env:
+            - name: KUBERNETES_NODE_HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: SE_OTEL_SERVICE_NAME
+              value: 'selenium-hub'
+            - name: SE_OTEL_RESOURCE_ATTRIBUTES
+              value: "app.kubernetes.io/component=selenium-grid-4.48.0-20260905,app.kubernetes.io/instance=selenium,app.kubernetes.io/managed-by=helm,app.kubernetes.io/version=4.48.0-20260905,helm.sh/chart=app-0.59.1"
+            - name: SE_HUB_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: SE_HUB_PORT
+              value: "4444"
+            - name: SE_SESSION_REQUEST_TIMEOUT
+              value: "300"
+          envFrom:
+            - configMapRef:
+                name: selenium-distributor-config
+            - configMapRef:
+                name: selenium-router-config
+            - configMapRef:
+                name: selenium-logging-config
+            - configMapRef:
+                name: selenium-server-config
+            - secretRef:
+                name: selenium-secrets
+            - secretRef:
+                name: selenium-basic-auth
+          volumeMounts:
+            - name: selenium-distributor-config
+              mountPath: /opt/bin/distributorProbe.sh
+              subPath: distributorProbe.sh
+            - name: "selenium-router-config"
+              mountPath: /opt/bin/routerGraphQLUrl.sh
+              subPath: routerGraphQLUrl.sh
+            - name: "selenium-router-config"
+              mountPath: /opt/bin/routerProbe.sh
+              subPath: routerProbe.sh
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+      volumes:
+        - name: "selenium-distributor-config"
+          configMap:
+            name: selenium-distributor-config
+            defaultMode: 493
+        - name: "selenium-router-config"
+          configMap:
+            name: selenium-router-config
+            defaultMode: 493

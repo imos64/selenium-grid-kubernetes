@@ -1,0 +1,14 @@
+apiVersion: v2
+name: selenium-grid-kubernetes
+description: selenium Kubernetes deployment maintained by imos64
+type: application
+version: 1.0.0
+home: https://github.com/imos64/selenium-grid-kubernetes
+maintainers:
+- name: imos64
+  url: https://github.com/imos64
+dependencies:
+- name: selenium-grid
+  alias: app
+  version: 0.59.1
+  repository: https://www.selenium.dev/docker-selenium
