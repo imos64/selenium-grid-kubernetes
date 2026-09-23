@@ -36,3 +36,5 @@ app:
     enabled: true
     create: false
     nameOverride: selenium-basic-auth
+workloadNetworkPolicy:
+  enabled: true

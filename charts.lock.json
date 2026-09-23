@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "charts": [
+    {
+      "path": "charts/selenium/charts/selenium-grid-0.59.1-techixora.1.tgz",
+      "sha256": "7cf44a4910cdeae583ef5ff6bea7321260248162aec9faa1d4879d1c25591542"
+    }
+  ]
+}

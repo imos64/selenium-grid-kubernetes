@@ -30,7 +30,7 @@ metadata:
     app.kubernetes.io/instance: selenium
     app.kubernetes.io/managed-by: helm
     app.kubernetes.io/version: 4.48.0-20260905
-    helm.sh/chart: app-0.59.1
+    helm.sh/chart: app-0.59.1-techixora.1
 ---
 # Source: selenium-grid-kubernetes/charts/app/templates/distributor-configmap.yaml
 apiVersion: v1
@@ -44,7 +44,7 @@ metadata:
     app.kubernetes.io/instance: selenium
     app.kubernetes.io/managed-by: helm
     app.kubernetes.io/version: 4.48.0-20260905
-    helm.sh/chart: app-0.59.1
+    helm.sh/chart: app-0.59.1-techixora.1
 data:
   distributorProbe.sh:    |
       #!/bin/bash
@@ -106,7 +106,7 @@ metadata:
     app.kubernetes.io/instance: selenium
     app.kubernetes.io/managed-by: helm
     app.kubernetes.io/version: 4.48.0-20260905
-    helm.sh/chart: app-0.59.1
+    helm.sh/chart: app-0.59.1-techixora.1
 data:
   SE_EVENT_BUS_HOST: "selenium-hub"
   SE_EVENT_BUS_PUBLISH_PORT: "4442"
@@ -125,7 +125,7 @@ metadata:
     app.kubernetes.io/instance: selenium
     app.kubernetes.io/managed-by: helm
     app.kubernetes.io/version: 4.48.0-20260905
-    helm.sh/chart: app-0.59.1
+    helm.sh/chart: app-0.59.1-techixora.1
 data:
   SE_LOG_LEVEL: "INFO"
   SE_STRUCTURED_LOGS: "false"
@@ -145,7 +145,7 @@ metadata:
     app.kubernetes.io/instance: selenium
     app.kubernetes.io/managed-by: helm
     app.kubernetes.io/version: 4.48.0-20260905
-    helm.sh/chart: app-0.59.1
+    helm.sh/chart: app-0.59.1-techixora.1
 data:
   SE_HUB_HOST: "selenium-hub"
   SE_HUB_PORT: '4444'
@@ -416,7 +416,7 @@ metadata:
     app.kubernetes.io/instance: selenium
     app.kubernetes.io/managed-by: helm
     app.kubernetes.io/version: 4.48.0-20260905
-    helm.sh/chart: app-0.59.1
+    helm.sh/chart: app-0.59.1-techixora.1
 data:
   ROUTER_CONFIG_DIRECTORY: '/opt/bin'
   routerGraphQLUrl.sh:    |
@@ -486,7 +486,7 @@ metadata:
     app.kubernetes.io/instance: selenium
     app.kubernetes.io/managed-by: helm
     app.kubernetes.io/version: 4.48.0-20260905
-    helm.sh/chart: app-0.59.1
+    helm.sh/chart: app-0.59.1-techixora.1
 data:
   SE_SERVER_PROTOCOL: "http"
   SE_SUPERVISORD_LOG_LEVEL: "info"
@@ -504,7 +504,7 @@ metadata:
     app.kubernetes.io/instance: selenium
     app.kubernetes.io/managed-by: helm
     app.kubernetes.io/version: 4.48.0-20260905
-    helm.sh/chart: app-0.59.1
+    helm.sh/chart: app-0.59.1-techixora.1
 spec:
   selector:
     app: selenium-hub
@@ -538,7 +538,7 @@ metadata:
     app.kubernetes.io/instance: selenium
     app.kubernetes.io/managed-by: helm
     app.kubernetes.io/version: 4.48.0-20260905
-    helm.sh/chart: app-0.59.1
+    helm.sh/chart: app-0.59.1-techixora.1
 spec:
   strategy:
     type: Recreate
@@ -558,12 +558,12 @@ spec:
         app.kubernetes.io/instance: selenium
         app.kubernetes.io/managed-by: helm
         app.kubernetes.io/version: 4.48.0-20260905
-        helm.sh/chart: app-0.59.1
+        helm.sh/chart: app-0.59.1-techixora.1
       annotations:
-        checksum/event-bus-configmap: c4f34f42e26c32f41ac730560b05fb46f815750683d628713101dcd52e286f67
-        checksum/node-configmap: c4e0b307a8f154cb7bdfa4603a770bf9248c2d37a6e00dc154f07f881495559a
-        checksum/logging-configmap: 592fb07af55f32a0316761eb525d718609f4987079f7e9c8dfd9c13b68ab831b
-        checksum/server-configmap: 03de91cd22ec57d5cc628f224375a1771cfc835ed5efed9635c2810c61b82bbc
+        checksum/event-bus-configmap: 902d7f72799c63d42d95a5666c88cc3e74601e6d2c45eb4f03d965a7ac960f26
+        checksum/node-configmap: 03e23076b148fb96908cd141ce35c28795fab421321a08168016c96a1fbea993
+        checksum/logging-configmap: 9bcd22e967825fe4ee3b55769dc1d5f69c7587fd148e5a901a7252748847c0bb
+        checksum/server-configmap: 74f82fc5aca098cca91ad88f615729289566d49a82fcc761c14e6efede2e156b
     spec:
       shareProcessNamespace: true
       serviceAccountName: selenium-serviceaccount
@@ -604,7 +604,7 @@ spec:
             - name: SE_OTEL_SERVICE_NAME
               value: "selenium-node-chrome"
             - name: SE_OTEL_RESOURCE_ATTRIBUTES
-              value: "app.kubernetes.io/component=selenium-grid-4.48.0-20260905,app.kubernetes.io/instance=selenium,app.kubernetes.io/managed-by=helm,app.kubernetes.io/version=4.48.0-20260905,helm.sh/chart=app-0.59.1"
+              value: "app.kubernetes.io/component=selenium-grid-4.48.0-20260905,app.kubernetes.io/instance=selenium,app.kubernetes.io/managed-by=helm,app.kubernetes.io/version=4.48.0-20260905,helm.sh/chart=app-0.59.1-techixora.1"
             - name: SE_NODE_HOST
               valueFrom:
                 fieldRef:
@@ -708,7 +708,7 @@ metadata:
     app.kubernetes.io/instance: selenium
     app.kubernetes.io/managed-by: helm
     app.kubernetes.io/version: 4.48.0-20260905
-    helm.sh/chart: app-0.59.1
+    helm.sh/chart: app-0.59.1-techixora.1
 spec:
   strategy:
     type: Recreate
@@ -728,12 +728,12 @@ spec:
         app.kubernetes.io/instance: selenium
         app.kubernetes.io/managed-by: helm
         app.kubernetes.io/version: 4.48.0-20260905
-        helm.sh/chart: app-0.59.1
+        helm.sh/chart: app-0.59.1-techixora.1
       annotations:
-        checksum/event-bus-configmap: c4f34f42e26c32f41ac730560b05fb46f815750683d628713101dcd52e286f67
-        checksum/node-configmap: c4e0b307a8f154cb7bdfa4603a770bf9248c2d37a6e00dc154f07f881495559a
-        checksum/logging-configmap: 592fb07af55f32a0316761eb525d718609f4987079f7e9c8dfd9c13b68ab831b
-        checksum/server-configmap: 03de91cd22ec57d5cc628f224375a1771cfc835ed5efed9635c2810c61b82bbc
+        checksum/event-bus-configmap: 902d7f72799c63d42d95a5666c88cc3e74601e6d2c45eb4f03d965a7ac960f26
+        checksum/node-configmap: 03e23076b148fb96908cd141ce35c28795fab421321a08168016c96a1fbea993
+        checksum/logging-configmap: 9bcd22e967825fe4ee3b55769dc1d5f69c7587fd148e5a901a7252748847c0bb
+        checksum/server-configmap: 74f82fc5aca098cca91ad88f615729289566d49a82fcc761c14e6efede2e156b
     spec:
       shareProcessNamespace: true
       serviceAccountName: selenium-serviceaccount
@@ -774,7 +774,7 @@ spec:
             - name: SE_OTEL_SERVICE_NAME
               value: "selenium-node-firefox"
             - name: SE_OTEL_RESOURCE_ATTRIBUTES
-              value: "app.kubernetes.io/component=selenium-grid-4.48.0-20260905,app.kubernetes.io/instance=selenium,app.kubernetes.io/managed-by=helm,app.kubernetes.io/version=4.48.0-20260905,helm.sh/chart=app-0.59.1"
+              value: "app.kubernetes.io/component=selenium-grid-4.48.0-20260905,app.kubernetes.io/instance=selenium,app.kubernetes.io/managed-by=helm,app.kubernetes.io/version=4.48.0-20260905,helm.sh/chart=app-0.59.1-techixora.1"
             - name: SE_NODE_HOST
               valueFrom:
                 fieldRef:
@@ -878,7 +878,7 @@ metadata:
     app.kubernetes.io/instance: selenium
     app.kubernetes.io/managed-by: helm
     app.kubernetes.io/version: 4.48.0-20260905
-    helm.sh/chart: app-0.59.1
+    helm.sh/chart: app-0.59.1-techixora.1
 spec:
   strategy:
     type: Recreate
@@ -892,10 +892,10 @@ spec:
     metadata:
       labels: *hub_labels
       annotations:
-        checksum/logging-configmap: 592fb07af55f32a0316761eb525d718609f4987079f7e9c8dfd9c13b68ab831b
-        checksum/server-configmap: 03de91cd22ec57d5cc628f224375a1771cfc835ed5efed9635c2810c61b82bbc
-        checksum/distributor-configmap: 1d053f83aff958fab96ce0189dd3458fdf9691ed150e3ab87f0072eca13459b2
-        checksum/router-configmap: 4b8d33e1afaf65b1e05088c149ccde7842b74910db27eb1a51eba0f7460fb277
+        checksum/logging-configmap: 9bcd22e967825fe4ee3b55769dc1d5f69c7587fd148e5a901a7252748847c0bb
+        checksum/server-configmap: 74f82fc5aca098cca91ad88f615729289566d49a82fcc761c14e6efede2e156b
+        checksum/distributor-configmap: 0f019f78bdd8ca14df63c1f3b54cf6858a5d066a58e2fb8025dd148fe2b1597d
+        checksum/router-configmap: ce2c313c3b7f10dfd4931a991f83b4957c0611f3b9bf92787adf6c82d67b8bce
         checksum/secrets: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
         checksum/tls-cert-secret: 01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b
     spec:
@@ -950,7 +950,7 @@ spec:
             - name: SE_OTEL_SERVICE_NAME
               value: 'selenium-hub'
             - name: SE_OTEL_RESOURCE_ATTRIBUTES
-              value: "app.kubernetes.io/component=selenium-grid-4.48.0-20260905,app.kubernetes.io/instance=selenium,app.kubernetes.io/managed-by=helm,app.kubernetes.io/version=4.48.0-20260905,helm.sh/chart=app-0.59.1"
+              value: "app.kubernetes.io/component=selenium-grid-4.48.0-20260905,app.kubernetes.io/instance=selenium,app.kubernetes.io/managed-by=helm,app.kubernetes.io/version=4.48.0-20260905,helm.sh/chart=app-0.59.1-techixora.1"
             - name: SE_HUB_HOST
               valueFrom:
                 fieldRef:

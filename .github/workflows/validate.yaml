@@ -27,3 +27,25 @@ jobs:
           make render
           git diff --exit-code -- k8s
           make validate
+  runtime-images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        component: [hub, chromium]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Build exact runtime, enforce image gate and generate SBOM
+        run: python3 scripts/qualify_runtime.py '${{ matrix.component }}' --output 'evidence/${{ matrix.component }}'
+      - name: Retain runtime evidence including failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: grid-runtime-${{ matrix.component }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: evidence/${{ matrix.component }}
+          retention-days: 7
+          if-no-files-found: error
