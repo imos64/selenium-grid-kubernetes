@@ -10,5 +10,5 @@ maintainers:
 dependencies:
 - name: selenium-grid
   alias: app
-  version: 0.59.1
+  version: 0.59.1-techixora.1
   repository: https://www.selenium.dev/docker-selenium

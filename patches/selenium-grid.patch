@@ -1,0 +1,37 @@
+--- a/selenium-grid/Chart.yaml
++++ b/selenium-grid/Chart.yaml
+@@ -36,4 +36,4 @@
+ sources:
+ - https://github.com/SeleniumHQ/docker-selenium
+ type: application
+-version: 0.59.1
++version: 0.59.1-techixora.1
+--- a/selenium-grid/templates/_helpers.tpl
++++ b/selenium-grid/templates/_helpers.tpl
+@@ -389,6 +389,9 @@
+         {{- toYaml . | nindent 6 }}
+       {{- end }}
+   spec:
++    {{- with $.Values.global.seleniumGrid.podSecurityContext }}
++    securityContext: {{- toYaml . | nindent 6 }}
++    {{- end }}
+     shareProcessNamespace: {{ $.Values.global.seleniumGrid.stdoutProbeLog | ternary "false" .node.shareProcessNamespace }}
+     serviceAccountName: {{ template "seleniumGrid.serviceAccount.fullname" . }}
+     serviceAccount: {{ template  "seleniumGrid.serviceAccount.fullname" . }}
+--- a/selenium-grid/templates/hub-deployment.yaml
++++ b/selenium-grid/templates/hub-deployment.yaml
+@@ -34,8 +34,14 @@
+         {{- toYaml . | nindent 8 }}
+     {{- end }}
+     spec:
++      {{- with .Values.global.seleniumGrid.podSecurityContext }}
++      securityContext: {{- toYaml . | nindent 8 }}
++      {{- end }}
+       serviceAccountName: {{ template "seleniumGrid.serviceAccount.fullname" . }}
+       serviceAccount: {{ template  "seleniumGrid.serviceAccount.fullname" . }}
++      {{- with .Values.hub.initContainers }}
++      initContainers: {{- toYaml . | nindent 8 }}
++      {{- end }}
+       containers:
+         - name: {{ template "seleniumGrid.hub.fullname" . }}
+           {{- $imageTag := default .Values.global.seleniumGrid.imageTag .Values.hub.imageTag }}
