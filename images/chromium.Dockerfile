@@ -10,6 +10,8 @@ WORKDIR /src/exporter
 RUN go mod download && go test -mod=readonly -p 2 ./... \
     && go build -mod=readonly -p 2 -ldflags="-s -w" -o /out/selenium-grid-exporter .
 WORKDIR /src/envsubst
+COPY images/envsubst-literal-output.patch /tmp/envsubst.patch
+RUN patch --fuzz=0 -p1 < /tmp/envsubst.patch
 RUN go test -mod=readonly -p 2 ./... \
     && go build -mod=readonly -p 2 -o /out/envsubst ./cmd/envsubst
 

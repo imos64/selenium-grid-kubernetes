@@ -13,6 +13,8 @@ def run(args,log,**kwargs):
 p=argparse.ArgumentParser(description=__doc__);p.add_argument('component',choices=['hub','chromium']);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
 a.output.mkdir(parents=True,exist_ok=True);out=a.output.resolve();rev=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
 path=ROOT/'images'/f'{a.component}.Dockerfile';assert path.read_bytes()==subprocess.check_output(['git','show',rev+':images/'+a.component+'.Dockerfile'],cwd=ROOT)
+for filename in subprocess.check_output(['git','ls-files','images'],cwd=ROOT,text=True).splitlines():
+ assert (ROOT/filename).read_bytes()==subprocess.check_output(['git','show',rev+':'+filename],cwd=ROOT),'uncommitted build input: '+filename
 tag=f'local-grid-{a.component}:{rev}'
 receipt={'schema_version':1,'component':a.component,'source_repository':'https://github.com/imos64/selenium-grid-kubernetes','source_revision':rev,'dockerfile_sha256':sha(path.read_bytes()),'image':tag,'run_id':os.environ.get('GITHUB_RUN_ID'),'run_attempt':os.environ.get('GITHUB_RUN_ATTEMPT'),'event':os.environ.get('GITHUB_EVENT_NAME'),'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'passed':False,'published':False}
 try:

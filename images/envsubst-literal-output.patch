@@ -1,0 +1,20 @@
+--- a/cmd/envsubst/main.go
++++ b/cmd/envsubst/main.go
+@@ -33,7 +33,7 @@
+ 
+ func main() {
+ 	flag.Usage = func() {
+-		fmt.Fprint(os.Stderr, fmt.Sprintf(usage))
++		fmt.Fprint(os.Stderr, usage)
+ 	}
+ 	flag.Parse()
+ 	var reader *bufio.Reader
+@@ -97,7 +97,7 @@
+ 
+ func usageAndExit(msg string) {
+ 	if msg != "" {
+-		fmt.Fprintf(os.Stderr, msg)
++		fmt.Fprint(os.Stderr, msg)
+ 		fmt.Fprintf(os.Stderr, "\n\n")
+ 	}
+ 	flag.Usage()
