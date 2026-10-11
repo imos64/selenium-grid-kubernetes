@@ -13,13 +13,19 @@ def run(args,log,**kwargs):
 p=argparse.ArgumentParser(description=__doc__);p.add_argument('component',choices=['hub','chromium']);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
 a.output.mkdir(parents=True,exist_ok=True);out=a.output.resolve();rev=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
 path=ROOT/'images'/f'{a.component}.Dockerfile';assert path.read_bytes()==subprocess.check_output(['git','show',rev+':images/'+a.component+'.Dockerfile'],cwd=ROOT)
+for filename in subprocess.check_output(['git','ls-files','images'],cwd=ROOT,text=True).splitlines():
+ assert (ROOT/filename).read_bytes()==subprocess.check_output(['git','show',rev+':'+filename],cwd=ROOT),'uncommitted build input: '+filename
 tag=f'local-grid-{a.component}:{rev}'
 receipt={'schema_version':1,'component':a.component,'source_repository':'https://github.com/imos64/selenium-grid-kubernetes','source_revision':rev,'dockerfile_sha256':sha(path.read_bytes()),'image':tag,'run_id':os.environ.get('GITHUB_RUN_ID'),'run_attempt':os.environ.get('GITHUB_RUN_ATTEMPT'),'event':os.environ.get('GITHUB_EVENT_NAME'),'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'passed':False,'published':False}
 try:
- assert run(['docker','build','--network','none','--build-arg','SOURCE_REVISION='+rev,'-f',str(path),'-t',tag,str(ROOT)],out/'build.log')==0,'image build failed'
+ assert run(['docker','build','--build-arg','SOURCE_REVISION='+rev,'-f',str(path),'-t',tag,str(ROOT)],out/'build.log')==0,'image build failed'
  info=json.loads(subprocess.check_output(['docker','image','inspect',tag]))[0]
  assert info['Config']['User']=='1200:1201' and info['Config']['Labels']['org.opencontainers.image.revision']==rev
  receipt['image_id']=info['Id']
+ # Build networking is limited to locked source/module/package retrieval. Runtime stays isolated.
+ helper_args=['docker','run','--rm','--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--memory','256m','--cpus','0.5','--env','GRID_REPAIR_SENTINEL=patched','--entrypoint','/bin/sh',tag,'-c',
+              'test "$(printf \'${GRID_REPAIR_SENTINEL}\' | /usr/local/bin/envsubst)" = patched && dpkg-query -W libssl3t64 openssl']
+ assert run(helper_args,out/'helper-runtime.log')==0,'helper runtime check failed'
  code='import importlib.util,pathlib,supervisor,requests; assert importlib.util.find_spec("pip") is None; assert not pathlib.Path("/usr/local/bin/rclone").exists(); print("runtime imports pass; unused tooling absent")'
  assert run(['docker','run','--rm','--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--memory','256m','--cpus','0.5','--entrypoint','/home/seluser/venv/bin/python3',tag,'-B','-c',code],out/'restricted-runtime.log')==0,'restricted runtime check failed'
  with tempfile.TemporaryDirectory(prefix='grid-qualification-') as td:
