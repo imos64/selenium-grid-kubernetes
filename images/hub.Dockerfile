@@ -17,7 +17,10 @@ RUN go test -mod=readonly -p 2 ./... \
 
 WORKDIR /src/pebble
 ADD --checksum=sha256:b697b87fc5412ecffdc73835fd7e396c27dc9a44e4069257686433d92203354b https://codeload.github.com/canonical/pebble/tar.gz/73bb6ea76d1b253020f9039067075ea3b1ec5175 /tmp/pebble.tar.gz
-RUN tar -xzf /tmp/pebble.tar.gz --strip-components=1 && printf '1.33.3' > cmd/VERSION && go build -mod=readonly -p 2 -o /out/pebble ./cmd/pebble
+RUN tar -xzf /tmp/pebble.tar.gz --strip-components=1 \
+    && printf '1.33.3' > cmd/VERSION \
+    && go get golang.org/x/net@v0.62.0 \
+    && go build -mod=readonly -p 2 -o /out/pebble ./cmd/pebble
 
 FROM docker.io/selenium/hub@sha256:9c8f6814537cdbd9d75e7c6efad52518fd3a7aade76cc760aaeeaf85c7ecb888
 # pip is build tooling; removing it also removes its vulnerable vendored libraries.
