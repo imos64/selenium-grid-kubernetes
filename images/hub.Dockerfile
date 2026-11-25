@@ -1,5 +1,5 @@
 # Rebuild the existing helper sources with the patched compiler.
-FROM golang:1.27.3-bookworm@sha256:dc0963f32053e4bc451d24d87e3892d42d01021b61f093e98eb95c0352bb84b0 AS helpers
+FROM golang:1.27.4-bookworm@sha256:ce59b41415e2524ae99926fe1f37ce48ba8c194dcbd2a56a65436cdcefa2bd34 AS helpers
 ENV GOTOOLCHAIN=local GOMAXPROCS=2 CGO_ENABLED=0
 ADD --checksum=sha256:e90a56fafa8f119a1282a734fa3e650e3cdb2bf5bc3d3c4154c42db2dc2a7408 https://codeload.github.com/SeleniumHQ/docker-selenium/tar.gz/b8c2fda186f98ce421c7df5f93e34034544c8e40 /tmp/selenium.tar.gz
 ADD --checksum=sha256:0aada33c43b514ec812528ed8de5eea549868ce85b5bea7ec015f2bd8b7339ca https://codeload.github.com/a8m/envsubst/tar.gz/bf6a99e3e2525ab75aca34d66c827eabbefbc236 /tmp/envsubst.tar.gz
@@ -15,6 +15,10 @@ RUN git apply --check /tmp/envsubst.patch && git apply /tmp/envsubst.patch
 RUN go test -mod=readonly -p 2 ./... \
     && go build -mod=readonly -p 2 -o /out/envsubst ./cmd/envsubst
 
+WORKDIR /src/pebble
+ADD --checksum=sha256:b697b87fc5412ecffdc73835fd7e396c27dc9a44e4069257686433d92203354b https://codeload.github.com/canonical/pebble/tar.gz/73bb6ea76d1b253020f9039067075ea3b1ec5175 /tmp/pebble.tar.gz
+RUN tar -xzf /tmp/pebble.tar.gz --strip-components=1 && printf '1.33.3' > cmd/VERSION && go build -mod=readonly -p 2 -o /out/pebble ./cmd/pebble
+
 FROM docker.io/selenium/hub@sha256:9c8f6814537cdbd9d75e7c6efad52518fd3a7aade76cc760aaeeaf85c7ecb888
 # pip is build tooling; removing it also removes its vulnerable vendored libraries.
 # The hub uses the preinstalled supervisor/runtime packages and installs nothing at startup.
@@ -23,6 +27,14 @@ USER root
 RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
+# The upstream OpenTelemetry classpath points to a separate Guava Android jar.
+ARG GUAVA_CACHE=/external_jars/https/repo1.maven.org/maven2/com/google/guava/guava
+ADD --chmod=0644 --checksum=sha256:b949fe975a32421c1a2633c07a4f1578b462f2f467668aa0a4023c5ff7c4a808 https://repo.maven.apache.org/maven2/com/google/guava/guava/33.7.2-android/guava-33.7.2-android.jar ${GUAVA_CACHE}/33.7.2-android/guava-33.7.2-android.jar
+RUN test -f "${GUAVA_CACHE}/33.6.0-android/guava-33.6.0-android.jar" \
+    && grep -q '33.6.0-android/guava-33.6.0-android.jar' /external_jars/.classpath.txt \
+    && sed -i 's|33.6.0-android/guava-33.6.0-android.jar|33.7.2-android/guava-33.7.2-android.jar|g' /external_jars/.classpath.txt \
+    && rm -r "${GUAVA_CACHE}/33.6.0-android"
+COPY --from=helpers /out/pebble /usr/bin/pebble
 COPY --from=helpers --chown=1200:1201 /out/envsubst /usr/local/bin/envsubst
 COPY --from=helpers --chown=1200:1201 /out/selenium-grid-exporter /opt/bin/selenium-grid-exporter
 ARG SOURCE_REVISION
