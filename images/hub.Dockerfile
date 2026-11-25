@@ -21,7 +21,7 @@ FROM docker.io/selenium/hub@sha256:9c8f6814537cdbd9d75e7c6efad52518fd3a7aade76cc
 RUN /home/seluser/venv/bin/python3 -m pip uninstall --yes pip
 USER root
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends --only-upgrade apt libapt-pkg6.0t64 libbrotli1 openjdk-21-jdk-headless openjdk-21-jre-headless libssl3t64 openssl \
+    && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=helpers --chown=1200:1201 /out/envsubst /usr/local/bin/envsubst
 COPY --from=helpers --chown=1200:1201 /out/selenium-grid-exporter /opt/bin/selenium-grid-exporter
